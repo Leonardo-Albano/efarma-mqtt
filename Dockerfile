@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy the contents of the 'app' directory to the container's /app directory
 COPY app/ /app/
 
-# Install required Python packages
-RUN pip install --no-cache-dir paho-mqtt requests flask
+# Install required Python packages with a compatible version of paho-mqtt
+RUN pip install --no-cache-dir paho-mqtt==1.6.1 requests flask
 
 # Expose the port Flask will run on
 EXPOSE 5002
