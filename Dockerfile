@@ -4,8 +4,8 @@ FROM python:3.12-slim
 # Set the working directory
 WORKDIR /app
 
-# Copy the application code to the container
-COPY . .
+# Copy the contents of the 'app' directory to the container's /app directory
+COPY app/ /app/
 
 # Install required Python packages
 RUN pip install --no-cache-dir paho-mqtt requests flask
