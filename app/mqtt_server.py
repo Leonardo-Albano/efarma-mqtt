@@ -110,6 +110,45 @@ def monitor_inactivity():
     global last_message_time
     while True:
         current_time = time.time()
+        # Se passou mais tempo que o permitido sem mensagem, atualiza como vazio
         if current_time - last_message_time > INACTIVITY_TIMEOUT:
-            save_tags_to_json([])
-        time.sleep(1)
+            print("Tempo de inatividade excedido. Atualizando arquivo para vazio.")
+            save_tags_to_json([])  # Atualiza o arquivo com valor vazio
+            last_message_time = current_time  # Reseta o tempo para evitar repetições
+        time.sleep(1)  # Verifica a cada 1 segundo
+ 
+# Configuração do cliente MQTT
+def configure_mqtt_client(client_id, topic, on_message_callback):
+    client = mqtt.Client(client_id)
+    client.on_connect = lambda c, u, f, rc: c.subscribe(topic)
+    client.on_message = on_message_callback
+client.connect("138.197.226.240", 1883, 10)
+    return client
+ 
+# Inicia os clientes MQTT
+print("Iniciando clientes MQTT...")
+client_tags = configure_mqtt_client("ClienteTagsPrateleira", "Tags_Prateleira", on_message_tags_prateleira)
+client_access = configure_mqtt_client("ClienteAccess", "Solicitar_Acesso", on_message_access)
+client_exit = configure_mqtt_client("ClienteExit", "Solicitar_Saida", on_message_access)
+client_tags.loop_start()
+client_access.loop_start()
+client_exit.loop_start()
+ 
+# Inicia a thread para monitorar inatividade
+inactivity_thread = threading.Thread(target=monitor_inactivity, daemon=True)
+inactivity_thread.start()
+ 
+# Configuração do servidor Flask para consulta do JSON
+app = Flask(__name__)
+ 
+@app.route('/get_tags', methods=['GET'])
+def get_tags():
+    if os.path.exists(JSON_FILE_PATH):
+        with open(JSON_FILE_PATH, 'r') as f:
+            data = json.load(f)
+        return jsonify(data), 200
+    else:
+        return jsonify({"error": "Nenhum dado disponível"}), 404
+ 
+if __name__ == "__main__":
+app.run(host='0.0.0.0', port=5002)
