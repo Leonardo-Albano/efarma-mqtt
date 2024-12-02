@@ -1,4 +1,4 @@
-import paho.mqtt.client as mqtt
+mport paho.mqtt.client as mqtt
 import json
 import os
 import threading
@@ -12,6 +12,7 @@ ENDPOINT_EXIT_URL = "http://157.230.224.194:5001/api/StockRoom/Exit"
 
 # Caminho do arquivo JSON onde as mensagens são salvas
 JSON_FILE_PATH = '/root/mqtt_messages/mensagens_mqtt.json'
+# JSON_FILE_PATH = r'C:\Users\Gabriel França\Desktop\mensagens_mqtt_acesso.json'
 
 # Tempo de inatividade antes de registrar como vazio (em segundos)
 INACTIVITY_TIMEOUT = 4
@@ -110,46 +111,45 @@ def monitor_inactivity():
     global last_message_time
     while True:
         current_time = time.time()
-        # Se passou mais tempo que o tempo de inatividade definido
+        # Se passou mais tempo que o permitido sem mensagem, atualiza como vazio
         if current_time - last_message_time > INACTIVITY_TIMEOUT:
-            print("Nenhuma mensagem recebida. Atualizando tags para vazio.")
-            save_tags_to_json([])  # Salva as tags como vazio
-            last_message_time = current_time  # Reseta o tempo da última mensagem
-        time.sleep(1)
-
-# Função de callback quando a conexão MQTT for estabelecida
-def on_connect(client, userdata, flags, rc):
-    print(f"Conectado ao broker com código: {rc}")
-
-    # Inscreve-se nos tópicos relevantes
-    client.subscribe("Tags_Prateleira")
-    client.subscribe("Solicitar_Acesso")
-    client.subscribe("Solicitar_Saida")
+            print("Tempo de inatividade excedido. Atualizando arquivo para vazio.")
+            save_tags_to_json([])  # Atualiza o arquivo com valor vazio
+            last_message_time = current_time  # Reseta o tempo para evitar repetições
+        time.sleep(1)  # Verifica a cada 1 segundo
 
 # Configuração do cliente MQTT
-client = mqtt.Client()
+def configure_mqtt_client(client_id, topic, on_message_callback):
+    client = mqtt.Client(client_id)
+    client.on_connect = lambda c, u, f, rc: c.subscribe(topic)
+    client.on_message = on_message_callback
+    client.connect("138.197.226.240", 1883, 10)
+    return client
 
-# Atribui as funções de callback
-client.on_connect = on_connect
-client.on_message = on_message_tags_prateleira
+# Inicia os clientes MQTT
+print("Iniciando clientes MQTT...")
+client_tags = configure_mqtt_client("ClienteTagsPrateleira", "Tags_Prateleira", on_message_tags_prateleira)
+client_access = configure_mqtt_client("ClienteAccess", "Solicitar_Acesso", on_message_access)
+client_exit = configure_mqtt_client("ClienteExit", "Solicitar_Saida", on_message_access)
+client_tags.loop_start()
+client_access.loop_start()
+client_exit.loop_start()
 
-# Conecta ao broker MQTT
-client.connect("localhost", 1883, 60)
-
-# Inicia o monitoramento de inatividade em uma thread separada
-inactivity_thread = threading.Thread(target=monitor_inactivity)
-inactivity_thread.daemon = True
+# Inicia a thread para monitorar inatividade
+inactivity_thread = threading.Thread(target=monitor_inactivity, daemon=True)
 inactivity_thread.start()
 
-# Inicia o loop do cliente MQTT
-client.loop_start()
+# Configuração do servidor Flask para consulta do JSON
+app = Flask(_name_)
 
-# Flask app (se necessário)
-app = Flask(__name__)
+@app.route('/get_tags', methods=['GET'])
+def get_tags():
+    if os.path.exists(JSON_FILE_PATH):
+        with open(JSON_FILE_PATH, 'r') as f:
+            data = json.load(f)
+        return jsonify(data), 200
+    else:
+        return jsonify({"error": "Nenhum dado disponível"}), 404
 
-@app.route('/')
-def home():
-    return jsonify({"status": "running"}), 200
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if _name_ == "_main_":
+    app.run(host='0.0.0.0', port=5002)
